@@ -34,7 +34,6 @@
 #define DEVICE_NAME_LEN		(sizeof(DEVICE_NAME) - 1)
 #define INTERVAL_MIN		0x6  /* 6 units,  7.5 ms */
 #define ALGORITHM_EVAL_INTERVAL 2000 /* Evaluate every 2000 packets */
-#define TOTAL_PACKETS_TO_SEND	8000 /* Stop after 10000 packets */
 #define CHMAP_BT_CONN_CH_COUNT	37
 #define CHMAP_BLE_BITMASK_SIZE	5
 
@@ -62,38 +61,38 @@ static uint32_t total_packets_sent = 0;
 static uint32_t packets_since_last_evaluation = 0;
 static uint32_t evaluation_count = 0;
 
-LOG_MODULE_REGISTER(paramtest, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(paramtest, LOG_LEVEL_INF);
 
 static void init_channel_map(void)
 {
 	memset(&algorithm_instance, 0, sizeof(algorithm_instance));
-	baseline_ch_filter_algo_init(&algorithm_instance);
+	channel_map_filter_algo_init(&algorithm_instance);
 
 	total_packets_sent = 0;
 	packets_since_last_evaluation = 0;
 	evaluation_count = 0;
 
-	printk("Channel map and algorithm initialized\n");
+	LOG_INF("Channel map and algorithm initialized\n");
 }
 
 void algorithm_evaluation_and_update(void)
 {
 	evaluation_count++;
 
-	int eval_result = baseline_ch_filter_algo_evaluate(&algorithm_instance);
+	int eval_result = channel_map_filter_algo_evaluate(&algorithm_instance);
 
 	if (eval_result == 1) { /* Algorithm performed evaluation, get new channel map */
 		uint8_t *new_channel_map =
-			baseline_ch_filter_algo_get_channel_map(&algorithm_instance);
+			channel_map_filter_algo_get_channel_map(&algorithm_instance);
 
 		if (new_channel_map) { /* Apply new map */
 			printk("Applying new channel map\n");
 
 			int err = bt_le_set_chan_map(new_channel_map);
 			if (err) {
-				printk("Failed to apply algorithm channel map (err %d)\n", err);
+				printk("Failed to apply channel map (err %d)\n", err);
 			} else {
-				printk("Successfully applied algorithm channel map\n");
+				printk("Successfully applied channel map\n\n");
 				set_suggested_bitmask_to_current_bitmask(&algorithm_instance);
 			}
 		}
@@ -245,6 +244,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 #endif /* CONFIG_BT_SMP */
 	}
 
+	// TODO: Try to make the central send update to peripheral rather than running algo on both.
+
 	printk("Connected as %s\n",
 	       conn_info.role == BT_CONN_ROLE_CENTRAL ? "central" : "peripheral");
 	printk("Connection interval: %d units (%.1f ms)\n", conn_info.le.interval,
@@ -344,11 +345,10 @@ static void test_run(void)
 
 	test_ready = false;
 
-	printk("Starting automated %d-packet algorithm test\n", TOTAL_PACKETS_TO_SEND);
 	printk("Algorithm will evaluate every %d packets\n", ALGORITHM_EVAL_INTERVAL);
 
 	/* Start sending data to trigger packet events */
-	while (default_conn && total_packets_sent < TOTAL_PACKETS_TO_SEND) {
+	while (default_conn) {
 		uint32_t time = k_cycle_get_32();
 
 		err = bt_latency_request(&latency_client, &time, sizeof(time));
@@ -357,13 +357,6 @@ static void test_run(void)
 		}
 
 		k_sleep(K_MSEC(1)); /* wait between requests */
-	}
-
-	// If we exit the loop due to packet limit, the disconnect was already handled in on_vs_evt
-	if (total_packets_sent >= TOTAL_PACKETS_TO_SEND) {
-		// CHECK IF THIS WORKS:
-		printk("Test completed!\n");
-		exit(0);
 	}
 }
 

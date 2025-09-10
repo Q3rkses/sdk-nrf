@@ -21,10 +21,8 @@
  */
 
 // Constants
-#define CHMAP_BT_CONN_CH_COUNT	      37
-#define CHMAP_BLE_BITMASK_SIZE	      5
-#define CHMAP_EVALUATION_SAMPLE_COUNT 2000
-#define CHMAP_MAX_RATING_HISTORY      10
+#define CHMAP_BT_CONN_CH_COUNT 37
+#define CHMAP_BLE_BITMASK_SIZE 5
 
 // Forward declarations
 struct chmap_instance;
@@ -81,7 +79,7 @@ extern "C" {
  *
  * @param chmap_instance Pointer to the channel map instance
  */
-void baseline_ch_filter_algo_init(struct chmap_instance *chmap_instance);
+void channel_map_filter_algo_init(struct chmap_instance *chmap_instance);
 
 /**
  * @brief Check if algorithm is ready for evaluation and perform it
@@ -89,7 +87,7 @@ void baseline_ch_filter_algo_init(struct chmap_instance *chmap_instance);
  * @param chmap_instance Pointer to the channel map instance
  * @return 1 if evaluation was performed, 0 if not ready, negative on error
  */
-int baseline_ch_filter_algo_evaluate(struct chmap_instance *chmap_instance);
+int channel_map_filter_algo_evaluate(struct chmap_instance *chmap_instance);
 
 /**
  * @brief Get the suggested channel map
@@ -97,7 +95,7 @@ int baseline_ch_filter_algo_evaluate(struct chmap_instance *chmap_instance);
  * @param chmap_instance Pointer to the channel map instance
  * @return Pointer to the suggested channel map bitmask (5 bytes)
  */
-uint8_t *baseline_ch_filter_algo_get_channel_map(struct chmap_instance *chmap_instance);
+uint8_t *channel_map_filter_algo_get_channel_map(struct chmap_instance *chmap_instance);
 
 /**
  * @brief Set algorithm parameters
@@ -105,7 +103,7 @@ uint8_t *baseline_ch_filter_algo_get_channel_map(struct chmap_instance *chmap_in
  * @param chmap_instance Pointer to the channel map instance
  * @param params Pointer to the new parameters
  */
-void baseline_ch_filter_algo_set_parameters(struct chmap_instance *chmap_instance,
+void channel_map_filter_algo_set_parameters(struct chmap_instance *chmap_instance,
 					    const struct chmap_filter_params *params);
 
 /**
@@ -130,7 +128,7 @@ void channel_map_filter_set_preferences(struct chmap_instance *chmap_instance,
  * @param rx_timeout_count Number of RX timeouts
  */
 static inline void
-baseline_ch_filter_algo_create_sample(struct chmap_qos_sample *sample, uint8_t channel_index,
+channel_map_filter_algo_create_sample(struct chmap_qos_sample *sample, uint8_t channel_index,
 				      uint16_t packets_sent, uint16_t crc_ok_count,
 				      uint16_t crc_error_count, uint16_t rx_timeout_count)
 {
