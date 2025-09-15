@@ -2,7 +2,7 @@ sample:
   description: Buetooth Low Energy Channel Map Update Sample
   name: Bluetooth LE Channel Map Update
 tests:
-  sample.bluetooth.llpm:
+  sample.bluetooth.chmap_update:
     sysbuild: true
     build_only: true
     integration_platforms:

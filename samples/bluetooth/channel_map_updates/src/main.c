@@ -30,12 +30,12 @@
 #include <bluetooth/hci_vs_sdc.h>
 #include "filter_algo.h"
 
-#define DEVICE_NAME		CONFIG_BT_DEVICE_NAME
-#define DEVICE_NAME_LEN		(sizeof(DEVICE_NAME) - 1)
-#define INTERVAL_MIN		0x6  /* 6 units,  7.5 ms */
-#define ALGORITHM_EVAL_INTERVAL 2000 /* Evaluate every 2000 packets */
-#define CHMAP_BT_CONN_CH_COUNT	37
-#define CHMAP_BLE_BITMASK_SIZE	5
+#define DEVICE_NAME		   CONFIG_BT_DEVICE_NAME
+#define DEVICE_NAME_LEN		   (sizeof(DEVICE_NAME) - 1)
+#define INTERVAL_UNITS		   0x6	/* 6 units,  7.5 ms */
+#define FILTER_EVALUATION_INTERVAL 2000 /* Evaluate every 2000 packets */
+#define CHMAP_BT_CONN_CH_COUNT	   37
+#define CHMAP_BLE_BITMASK_SIZE	   5
 
 static K_SEM_DEFINE(test_ready_sem, 0, 1);
 static bool test_ready;
@@ -44,7 +44,7 @@ static struct bt_latency latency;
 static struct bt_latency_client latency_client;
 static struct bt_le_conn_param *conn_param =
 	/* Use standard 7.5 ms interval (6 * 1.25 ms) */
-	BT_LE_CONN_PARAM(INTERVAL_MIN, INTERVAL_MIN, 0, 400);
+	BT_LE_CONN_PARAM(INTERVAL_UNITS, INTERVAL_UNITS, 0, 400);
 static struct bt_conn_info conn_info = {0};
 
 static const struct bt_data ad[] = {
@@ -56,51 +56,48 @@ static const struct bt_data sd[] = {
 	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
 };
 
-static struct chmap_instance algorithm_instance;
+static struct chmap_instance filter_chmap_instance;
 static uint32_t total_packets_sent = 0;
 static uint32_t packets_since_last_evaluation = 0;
-static uint32_t evaluation_count = 0;
 
 LOG_MODULE_REGISTER(paramtest, LOG_LEVEL_INF);
 
 static void init_channel_map(void)
 {
-	memset(&algorithm_instance, 0, sizeof(algorithm_instance));
-	channel_map_filter_algo_init(&algorithm_instance);
+	memset(&filter_chmap_instance, 0, sizeof(filter_chmap_instance));
+	channel_map_filter_algo_init(&filter_chmap_instance);
 
 	total_packets_sent = 0;
 	packets_since_last_evaluation = 0;
-	evaluation_count = 0;
 
 	LOG_INF("Channel map and algorithm initialized\n");
 }
 
 void algorithm_evaluation_and_update(void)
 {
-	evaluation_count++;
 
-	int eval_result = channel_map_filter_algo_evaluate(&algorithm_instance);
+	int eval_result = channel_map_filter_algo_evaluate(&filter_chmap_instance);
 
 	if (eval_result == 1) { /* Algorithm performed evaluation, get new channel map */
 		uint8_t *new_channel_map =
-			channel_map_filter_algo_get_channel_map(&algorithm_instance);
+			channel_map_filter_algo_get_channel_map(&filter_chmap_instance);
 
 		if (new_channel_map) { /* Apply new map */
-			printk("Applying new channel map\n");
+			LOG_INF("Applying new channel map\n");
 
 			int err = bt_le_set_chan_map(new_channel_map);
 			if (err) {
-				printk("Failed to apply channel map (err %d)\n", err);
+				LOG_ERR("Failed to apply channel map (err %d)\n", err);
 			} else {
-				printk("Successfully applied channel map\n\n");
-				set_suggested_bitmask_to_current_bitmask(&algorithm_instance);
+				LOG_INF("Successfully applied channel map\n");
+				set_suggested_bitmask_to_current_bitmask(&filter_chmap_instance);
 			}
 		}
 	} else if (eval_result == 0) {
 		return;
 
 	} else {
-		printk("Algorithm evaluation failed (err %d)\n", eval_result);
+		LOG_ERR("Algorithm evaluation failed (err %d)\n", eval_result);
 	}
 
 	packets_since_last_evaluation = 0;
@@ -244,7 +241,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 #endif /* CONFIG_BT_SMP */
 	}
 
-	// TODO: Try to make the central send update to peripheral rather than running algo on both.
+	// TODO: Try to make the central send update to peripheral rather than running algo on both
+	// centra and peripheral device.
 
 	printk("Connected as %s\n",
 	       conn_info.role == BT_CONN_ROLE_CENTRAL ? "central" : "peripheral");
@@ -272,6 +270,10 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 static bool on_vs_evt(struct net_buf_simple *buf)
 {
+	if (conn_info.role != BT_CONN_ROLE_CENTRAL) {
+		return true;
+	}
+
 	uint8_t code;
 	sdc_hci_subevent_vs_qos_conn_event_report_t *evt;
 
@@ -291,21 +293,22 @@ static bool on_vs_evt(struct net_buf_simple *buf)
 
 	total_packets_sent++;
 	packets_since_last_evaluation++;
-	algorithm_instance.sample_processed_count++; /* total count (all packets)*/
-	algorithm_instance.bt_channels[channel_index]
+	filter_chmap_instance.processed_samples_count++; /* total count (all packets)*/
+	filter_chmap_instance.bt_channels[channel_index]
 		.total_packets_sent++; /*local count (per channel packets)*/
 
 	if (evt->crc_error_count > 0) { /* CRC error occurred */
-		algorithm_instance.bt_channels[channel_index].total_crc_errors++;
+		filter_chmap_instance.bt_channels[channel_index].total_crc_errors++;
 	} else {
-		algorithm_instance.bt_channels[channel_index].total_crc_ok++;
+		filter_chmap_instance.bt_channels[channel_index].total_crc_ok++;
 	}
 
 	if (evt->rx_timeout > 0) { /* rx-timeout occurred */
-		algorithm_instance.bt_channels[channel_index].total_rx_timeouts += evt->rx_timeout;
+		filter_chmap_instance.bt_channels[channel_index].total_rx_timeouts +=
+			evt->rx_timeout;
 	}
 
-	if (packets_since_last_evaluation >= ALGORITHM_EVAL_INTERVAL) {
+	if (packets_since_last_evaluation >= FILTER_EVALUATION_INTERVAL) {
 		algorithm_evaluation_and_update();
 	}
 
@@ -345,7 +348,7 @@ static void test_run(void)
 
 	test_ready = false;
 
-	printk("Algorithm will evaluate every %d packets\n", ALGORITHM_EVAL_INTERVAL);
+	printk("Algorithm will evaluate every %d packets\n", FILTER_EVALUATION_INTERVAL);
 
 	/* Start sending data to trigger packet events */
 	while (default_conn) {
@@ -389,7 +392,7 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 int main(void)
 {
 	int err;
-	printk("Starting Bluetooth Standard Connection Sample\n");
+	LOG_INF("Starting Bluetooth Channel Map Update Sample\n");
 
 #if defined(CONFIG_USB_DEVICE_STACK)
 	const struct device *uart_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
@@ -408,17 +411,14 @@ int main(void)
 
 	console_init();
 
-	printk("Starting Bluetooth Channel Map Update Sample\n");
-
 	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 		return 0;
 	}
 
-	printk("Bluetooth initialized\n");
+	LOG_INF("Bluetooth initialized\n");
 
-	// Initialize channel map
 	init_channel_map();
 
 	err = bt_latency_init(&latency, NULL);
@@ -440,24 +440,24 @@ int main(void)
 	}
 
 	while (true) {
-		printk("Choose device role - type c (central) or p (peripheral): ");
+		LOG_INF("Choose device role - type c (central) or p (peripheral): ");
 
 		char input_char = console_getchar();
 
 		printk("\n");
 
 		if (input_char == 'c') {
-			printk("Central. Starting scanning\n");
+			LOG_INF("Central. Starting scanning\n");
 			scan_init();
 			scan_start();
 			break;
 		} else if (input_char == 'p') {
-			printk("Peripheral. Starting advertising\n");
+			LOG_INF("Peripheral. Starting advertising\n");
 			adv_start();
 			break;
 		}
 
-		printk("Invalid role\n");
+		LOG_WRN("Invalid role\n");
 	}
 
 	for (;;) {

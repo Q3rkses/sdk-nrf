@@ -10,15 +10,16 @@
 #include <stdio.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/random/random.h>
+#include <zephyr/bluetooth/hci.h>
 
 // Constants
 #define CHMAP_BT_CONN_CH_COUNT		      37
 #define CHMAP_BLE_BITMASK_SIZE		      5
-#define CHMAP_EVALUATION_SAMPLE_COUNT	      5000
-#define CHMAP_EVALUATIONS_BEFORE_RESET_COUNT  3
-#define CHMAP_MAX_RATING_HISTORY	      10
 #define CHMAP_DEFAULT_DESIRED_ACTIVE_CHANNELS 30
 #define CHMAP_DEFAULT_MIN_ACTIVE_CHANNELS     5
+#define FILTER_EVALUATION_SAMPLE_COUNT	      2000
+#define FILTER_EVALUATIONS_BEFORE_RESET_COUNT 3
+#define FILTER_MAX_RATING_HISTORY	      10
 
 static uint8_t evaluations_since_last_evaluation = 0;
 
@@ -49,10 +50,11 @@ struct chmap_instance {
 	struct chmap_channel bt_channels[CHMAP_BT_CONN_CH_COUNT];
 	uint8_t desired_active_channels;
 	uint8_t min_active_channels;
-	uint16_t sample_processed_count;
 	uint8_t active_channel_count;
 	uint8_t suggested_chn_bitmask[CHMAP_BLE_BITMASK_SIZE];
 	uint8_t current_chn_bitmask[CHMAP_BLE_BITMASK_SIZE];
+	uint16_t processed_samples_count;
+	uint8_t evaluations_since_last_evaluation;
 };
 
 // Function declarations
@@ -62,9 +64,9 @@ static void reset_sample_counters(struct chmap_instance *chmap_instance);
 static void set_default_parameters(struct chmap_filter_params *params);
 static void decrement_cooldown_time_and_update_state(struct chmap_instance *chmap_instance);
 static void add_random_channel_to_channel_map(struct chmap_instance *chmap_instance);
-void channel_map_filter_set_preferences(struct chmap_instance *chmap_instance,
-					const uint8_t desired_active_channels,
-					const uint8_t min_active_channels);
+// void channel_map_filter_set_preferences(struct chmap_instance *chmap_instance,
+// 					const uint8_t desired_active_channels,
+// 					const uint8_t min_active_channels);
 
 LOG_MODULE_REGISTER(algo, LOG_LEVEL_INF);
 
@@ -94,7 +96,8 @@ void channel_map_filter_algo_init(struct chmap_instance *chmap_instance)
 	memset(chmap_instance->suggested_chn_bitmask, 0xFF, CHMAP_BLE_BITMASK_SIZE);
 
 	chmap_instance->active_channel_count = CHMAP_BT_CONN_CH_COUNT;
-	chmap_instance->sample_processed_count = 0;
+	chmap_instance->processed_samples_count = 0;
+	chmap_instance->evaluations_since_last_evaluation = 0;
 }
 
 void print_channel_stats(struct chmap_instance *chmap_instance)
@@ -129,7 +132,7 @@ int channel_map_filter_algo_evaluate(struct chmap_instance *chmap_instance)
 		return -1;
 	}
 
-	if (chmap_instance->sample_processed_count < CHMAP_EVALUATION_SAMPLE_COUNT) {
+	if (chmap_instance->processed_samples_count < FILTER_EVALUATION_SAMPLE_COUNT) {
 		return 0;
 	}
 
@@ -149,7 +152,8 @@ int channel_map_filter_algo_evaluate(struct chmap_instance *chmap_instance)
 		add_random_channel_to_channel_map(chmap_instance);
 	}
 
-	if (evaluations_since_last_evaluation > CHMAP_EVALUATIONS_BEFORE_RESET_COUNT) {
+	if (chmap_instance->evaluations_since_last_evaluation >
+	    FILTER_EVALUATIONS_BEFORE_RESET_COUNT) {
 		// Uncomment for verbose printing every channel eval:
 		print_channel_stats(chmap_instance);
 
@@ -160,10 +164,11 @@ int channel_map_filter_algo_evaluate(struct chmap_instance *chmap_instance)
 	printk("Channel map evaluation completed successfully.");
 	printk("Active channels: %d\n", chmap_instance->active_channel_count);
 
-	evaluations_since_last_evaluation++;
+	chmap_instance->evaluations_since_last_evaluation++;
 	return 1; // Evaluation performed
 }
 
+// TODO: Test dynamically adaptive alternatives
 // Decrement cooldown_time for channel, and update state if cooldown_time is over
 static void decrement_cooldown_time_and_update_state(struct chmap_instance *chmap_instance)
 {
@@ -172,8 +177,7 @@ static void decrement_cooldown_time_and_update_state(struct chmap_instance *chma
 			continue;
 		}
 		chmap_instance->bt_channels[i].cooldown_time_remaining--;
-		// If decrementation of cooldown lead to cooldown_time_remaining = 0, update state
-		// aswell:
+		// If decrementation lead to cooldown_time_remaining = 0, update state too
 		if (chmap_instance->bt_channels[i].cooldown_time_remaining == 0 &&
 		    chmap_instance->bt_channels[i].state == 2) {
 			chmap_instance->bt_channels[i].state = 0;
@@ -181,8 +185,8 @@ static void decrement_cooldown_time_and_update_state(struct chmap_instance *chma
 	}
 }
 
-// Add random disabled channel(s) (state 0, that is: channels where cooldown_time done) to channel
-// map to adapt to dynamic enviorments.
+// Pick and add random channel(s) with state=0 (channels where cooldown_time done) back to channel
+// map
 static void add_random_channel_to_channel_map(struct chmap_instance *chmap_instance)
 {
 	// Count number of channels with state 0.
@@ -422,8 +426,8 @@ static void reset_sample_counters(struct chmap_instance *chmap_instance)
 		chmap_instance->bt_channels[i].total_rx_timeouts = 0;
 	}
 
-	chmap_instance->sample_processed_count = 0;
-	evaluations_since_last_evaluation = 0;
+	chmap_instance->processed_samples_count = 0;
+	chmap_instance->evaluations_since_last_evaluation = 0;
 }
 
 void set_suggested_bitmask_to_current_bitmask(struct chmap_instance *chmap_instance)

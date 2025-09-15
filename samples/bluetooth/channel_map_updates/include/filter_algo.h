@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#ifndef BASELINE_CH_FILTER_ALGO_H
-#define BASELINE_CH_FILTER_ALGO_H
+#ifndef FILTER_ALGO_H
+#define FILTER_ALGO_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -51,7 +51,8 @@ struct chmap_qos_sample {
 struct chmap_channel {
 	float rating;
 	float prev_rating;
-	uint8_t state; // 0=disabled, 1=enabled, 2=cooldown
+	uint8_t state;
+	uint8_t cooldown_time_remaining; // 0=disabled, 1=enabled, 2=cooldown
 	uint16_t total_packets_sent;
 	uint16_t total_crc_ok;
 	uint16_t total_crc_errors;
@@ -64,10 +65,11 @@ struct chmap_instance {
 	struct chmap_channel bt_channels[CHMAP_BT_CONN_CH_COUNT];
 	uint8_t desired_active_channels;
 	uint8_t min_active_channels;
-	uint16_t sample_processed_count;
 	uint8_t active_channel_count;
 	uint8_t suggested_chn_bitmask[CHMAP_BLE_BITMASK_SIZE];
 	uint8_t current_chn_bitmask[CHMAP_BLE_BITMASK_SIZE];
+	uint16_t processed_samples_count;
+	uint8_t evaluations_since_last_evaluation;
 };
 
 #ifdef __cplusplus
@@ -158,4 +160,4 @@ void set_suggested_bitmask_to_current_bitmask(struct chmap_instance *chmap_insta
 }
 #endif
 
-#endif // BASELINE_CH_FILTER_ALGO_H
+#endif // FILTER_ALGO_H
