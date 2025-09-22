@@ -3,8 +3,6 @@
 Bluetooth: Channel Map Updates
 ##############################
 
-..
-   Table of contents removed for GitHub rendering
 
 The Channel Map Updates sample demonstrates an autonomous channel map update algorithm for Bluetooth® Low Energy connections using Quality of Service (QoS) events.
 The algorithm automatically evaluates channel performance and generates optimized channel maps to improve connection reliability.
@@ -43,14 +41,14 @@ Rating Calculation
 
 The algorithm evaluates each channel after collecting a configurable number of samples using the following formula:
 
-.. code-block:: none
+.. code-block:: text
 
    rating = (1.0f - w_3) * prev_rating + w_3 * (1.0f - (w_1 * crc_error_rate + w_2 * rx_timeout_rate));
 
 Where:
 
 * ``w_1``: Weight for CRC errors
-* ``w_2``: Weight for RX timeouts  
+* ``w_2``: Weight for RX timeouts
 * ``w_3``: Weight for old rating
 * ``crc_error_rate``: ``crc_errors / packets_sent``
 * ``rx_timeout_rate``: ``rx_timeouts / packets_sent``
@@ -146,7 +144,7 @@ Testing in Simulation:
    .. code-block:: bash
 
       cd <babblesim_root>/tools/bsim/bin
-      ./bs_2G4_phy_v1 -s <simulator_name> -p <phy_name> -D <total_devices> -sim_length 10e8 -channel Indoorv1 -defmodem BLE_simple
+      ./bs_2G4_phy_v1 -s=<simulator_name> -p=<phy_name> -D=<total_devices> -sim_length=10e8 -channel=Indoorv1 -defmodem=BLE_simple
 
    This starts a physical layer process with the Indoorv1 channel preset and the BLE_simple modem for more realistic packet transfer.
 
@@ -158,6 +156,7 @@ Sample output
 =============
 
 The result should look similar to the following output on the central device::
+
 
    *** Booting nRF Connect SDK v3.0.2-89ba1294ac9b ***
    *** Using Zephyr OS v4.0.99-f791c49f492c ***
@@ -213,6 +212,7 @@ The result should look similar to the following output on the central device::
 
 
 The result should look similar to the following output on the peripheral device::
+
    *** Booting nRF Connect SDK v3.0.2-89ba1294ac9b ***
    *** Using Zephyr OS v4.0.99-f791c49f492c ***
    I: Starting Bluetooth Channel Map Update Sample
