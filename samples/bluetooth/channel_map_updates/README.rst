@@ -14,15 +14,14 @@ Requirements
 ************
 
 The sample supports the following development kits:
+   
+.. table-from-sample-yaml::
 
-      - nrf54l15dk/nrf54l05/cpuapp
-      - nrf54l15dk/nrf54l10/cpuapp
-      - nrf54l15dk/nrf54l15/cpuapp
-      - nrf54l15bsim/nrf54l15/cpuapp
+You need at least two development kits to physically test this sample:
 
-.. include:: /includes/tfm.txt
+* Currently only supports channel map updates to one peripheral device. To demonstrate you need two development kits.
 
-You can use any two of the development kits listed above and mix different development kits.
+You can use mix different development kits from the list above.
 
 The sample also requires a connection to a computer with a serial terminal for each of the development kits.
 
