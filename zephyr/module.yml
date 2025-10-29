@@ -1,3 +1,4 @@
+name: nrf
 build:
   cmake: .
   kconfig: Kconfig.nrf
